@@ -1,0 +1,85 @@
+#!/bin/bash
+
+### global
+gbn=$(basename ${BASH_SOURCE})
+
+scgen_input="qp-sc_input.py"
+scgen_merge="qp-sc_merge.py"
+scgen_wsgen="wsgen"
+
+### help
+function help/scgen() {
+  cat << EOF
+Supercell generator
+
+Usage: ${gbn} options
+              -i input file
+              -p program
+              -c config
+              -m "merge list"
+              -t merge transform file
+
+  program:
+    vasp - VASP
+EOF
+exit 1
+}
+
+### args
+_i="CONTCAR"
+_p="vasp"
+_c="config.ini"
+_m=""
+_d=""
+_opt=""
+_t=""
+while getopts hvi:p:c:m:t:d o; do
+  case "$o" in
+    i) _i=$OPTARG;;
+    p) _p=$OPTARG;;
+    c) _c=$OPTARG;;
+    m) _m=$OPTARG;;
+    d) _d="-d";;
+    t) _t="-t ${OPTARG}";;
+    v) gdbg=true; opt="-v";;
+    h|*) help/scgen;;
+  esac
+done
+
+### main
+if test "${_p}" = "vasp" ; then
+  echo "Primitive Cell"
+  echo "--------------"
+  ${scgen_input} ${_opt} -c "${_c}" -i "${_i}"
+  if test $? -gt 0 ; then
+    echo "Input generation failed"
+    exit 1
+  fi
+  for inp in *.wsgen ; do
+    out="${inp%%wsgen}wsout"
+    ${scgen_wsgen} < "${inp}" > "${out}"
+  done
+
+  if test -z "${_m}" ; then
+    echo "Merge failed"
+    exit 1
+  fi
+
+  _inp=""
+  _first=true
+  for m in ${_m} ; do
+    if ${_first} ; then
+      _inp="${m}:${m}-${_i}.wsout"
+      _first=false
+    else
+      _inp="${_inp},${m}:${m}-${_i}.wsout"
+    fi
+  done
+
+  echo ""
+  echo "Merge: ${_inp}"
+  ${scgen_merge} ${_opt} ${_t} ${_d} -i "${_inp}"
+else
+  echo "Program ${_p} not supported"
+  exit 1
+fi
